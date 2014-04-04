@@ -1,0 +1,1 @@
+SELECT * FROM plantscreen.tab_experiment WHERE exp_name REGEXP "^Project#.{4}-.{4}_Experiment#.{4}" ORDER BY exp_start_date DESC LIMIT 1000;
