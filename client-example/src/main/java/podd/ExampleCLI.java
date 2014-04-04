@@ -7,6 +7,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -94,9 +95,8 @@ public class ExampleCLI
                 {
                     Files.createDirectories(outputDirPath);
                 }
-                final Map<String, Path> dumpTrayscanExperiment =
-                        client.dumpTrayscanExperimentToBagIt(experimentBarcode.value(options), outputDirPath,
-                                dumpBags.value(options));
+                // TODO: Implement this to contain real results
+                final Map<String, Path> dumpTrayscanExperiment = new HashMap<>();
                 
                 if(!dumpTrayscanExperiment.isEmpty())
                 {
@@ -123,7 +123,8 @@ public class ExampleCLI
                         System.out.println("Dumped: " + nextEntry.getKey() + " => " + nextEntry.getValue());
                         if(nextEntry.getKey().startsWith("bag"))
                         {
-                            client.uploadToCherax(Arrays.asList(nextEntry.getValue()), outputDirPath, keyExtractor);
+                            // TODO: Support the new method
+                            //client.uploadToCherax(Arrays.asList(nextEntry.getValue()), outputDirPath, keyExtractor);
                         }
                     }
                     // Clear out passphrase from memory at this point

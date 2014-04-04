@@ -16,17 +16,8 @@
  */
 package com.github.podd.example;
 
-import gov.loc.repository.bagit.Bag;
-import gov.loc.repository.bagit.BagFactory;
-import gov.loc.repository.bagit.BagFactory.LoadOption;
-import gov.loc.repository.bagit.transformer.impl.DefaultCompleter;
-import gov.loc.repository.bagit.utilities.SimpleResult;
-import gov.loc.repository.bagit.verify.FailModeSupporting.FailMode;
-import gov.loc.repository.bagit.writer.impl.ZipWriter;
-
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -38,9 +29,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Blob;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -52,12 +41,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -68,18 +55,13 @@ import javax.imageio.ImageIO;
 import net.schmizz.sshj.DefaultConfig;
 import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.common.SecurityUtils;
-import net.schmizz.sshj.common.StreamCopier;
 import net.schmizz.sshj.sftp.FileAttributes;
-import net.schmizz.sshj.sftp.RemoteFile;
 import net.schmizz.sshj.sftp.SFTPClient;
 import net.schmizz.sshj.sftp.SFTPFileTransfer;
-import net.schmizz.sshj.sftp.RemoteFile.RemoteFileInputStream;
 import net.schmizz.sshj.userauth.keyprovider.FileKeyProvider;
 import net.schmizz.sshj.userauth.keyprovider.PKCS8KeyFile;
 import net.schmizz.sshj.userauth.password.PasswordFinder;
 import net.schmizz.sshj.xfer.FileSystemFile;
-import net.schmizz.sshj.xfer.InMemoryDestFile;
-import net.schmizz.sshj.xfer.LocalDestFile;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.input.ReaderInputStream;
@@ -101,7 +83,6 @@ import org.openrdf.rio.RDFHandlerException;
 import org.openrdf.rio.Rio;
 
 import au.com.bytecode.opencsv.CSVReader;
-import au.com.bytecode.opencsv.CSVWriter;
 
 import com.github.podd.client.api.PoddClientException;
 import com.github.podd.client.impl.restlet.RestletPoddClientImpl;
@@ -131,6 +112,11 @@ public class ExamplePoddClient extends RestletPoddClientImpl
     public ExamplePoddClient(final String poddServerUrl)
     {
         super(poddServerUrl);
+    }
+    
+    private void checkTrayScanServerDetails()
+    {
+        throw new UnsupportedOperationException("TODO: Implement checkTrayScanServerDetails");
     }
     
     /**
@@ -192,13 +178,20 @@ public class ExamplePoddClient extends RestletPoddClientImpl
      * @throws GraphUtilException
      *             If there was an illformed graph.
      */
-    public void generateTrayRDF(final ConcurrentMap<InferredOWLOntologyID, Model> uploadQueue,
-            final ExampleCSVLine nextLine) throws PoddClientException, GraphUtilException
+    public void generateTrayRDF(final ConcurrentMap<String, ConcurrentMap<URI, InferredOWLOntologyID>> projectUriMap,
+            final ConcurrentMap<String, ConcurrentMap<URI, URI>> experimentUriMap,
+            final ConcurrentMap<String, ConcurrentMap<URI, URI>> trayUriMap,
+            final ConcurrentMap<String, ConcurrentMap<URI, URI>> potUriMap,
+            final ConcurrentMap<URI, ConcurrentMap<URI, Model>> materialUriMap,
+            final ConcurrentMap<URI, ConcurrentMap<URI, Model>> genotypeUriMap,
+            final ConcurrentMap<InferredOWLOntologyID, Model> uploadQueue, final ExampleCSVLine nextLine)
+        throws PoddClientException, GraphUtilException
     {
         Objects.requireNonNull(nextLine, "Line was null");
         Objects.requireNonNull(nextLine.projectID, "ProjectID in line was null");
         
-        final Map<URI, InferredOWLOntologyID> projectDetails = this.getProjectDetails(nextLine.projectID);
+        final Map<URI, InferredOWLOntologyID> projectDetails =
+                this.getProjectDetails(projectUriMap, nextLine.projectID);
         
         final URI nextProjectUri = projectDetails.keySet().iterator().next();
         final InferredOWLOntologyID nextProjectID = projectDetails.get(nextProjectUri);
@@ -218,22 +211,22 @@ public class ExamplePoddClient extends RestletPoddClientImpl
             nextResult = putIfAbsent;
         }
         
-        final URI nextTrayUri = this.getTrayUri(nextLine.trayID, nextProjectID, nextExperimentUri);
+        final URI nextTrayUri = this.getTrayUri(trayUriMap, nextLine.trayID, nextProjectID, nextExperimentUri);
         
         // Check whether plantId already has an assigned URI
-        final URI nextPotUri = this.getPotUri(nextLine.plantID, nextProjectID, nextTrayUri);
+        final URI nextPotUri = this.getPotUri(potUriMap, nextLine.plantID, nextProjectID, nextTrayUri);
         
         // Check whether genus/specieis/plantName already has an assigned URI (and automatically
         // assign a temporary URI if it does not)
         final URI nextGenotypeUri =
-                this.getGenotypeUri(nextLine.genus, nextLine.species, nextLine.plantName, nextLine.plantLineNumber,
-                        nextLine.control, nextProjectID, nextProjectUri);
+                this.getGenotypeUri(genotypeUriMap, nextLine.genus, nextLine.species, nextLine.plantName,
+                        nextLine.plantLineNumber, nextLine.control, nextProjectID, nextProjectUri);
         
         // // Check whether the material for the given genotype for the given pot already has an
         // assigned URI (and automatically
         // // assign a temporary URI if it does not)
         final URI nextMaterialUri =
-                this.getMaterialUri(nextGenotypeUri, nextProjectID, nextPotUri, nextLine.potNumber,
+                this.getMaterialUri(materialUriMap, nextGenotypeUri, nextProjectID, nextPotUri, nextLine.potNumber,
                         nextLine.plantLineNumber, nextLine.control);
         
         // Add new poddScience:Container for tray
@@ -535,6 +528,20 @@ public class ExamplePoddClient extends RestletPoddClientImpl
     }
     
     /**
+     * Get a connection to the TrayScanDB database.
+     * 
+     * @return A connection to the SQL database for TrayScan
+     * @throws SQLException
+     */
+    public Connection getMySQLConnection() throws SQLException
+    {
+        throw new UnsupportedOperationException("TODO: Implement getMySQLConnection");
+        // return DriverManager.getConnection("jdbc:mysql://" + this.getTrayScanHost() + "/" +
+        // this.getTrayScanDbName(),
+        // this.getTrayScanUsername(), this.getTrayScanPassword());
+    }
+    
+    /**
      * @param potUriMap
      * @param plantId
      * @param nextProjectID
@@ -555,7 +562,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
         else
         {
             final Model plantIdSparqlResults =
-                    this.doSPARQL(String.format(ClientSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE_LABEL_STRSTARTS,
+                    this.doSPARQL(String.format(ExampleSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE_LABEL_STRSTARTS,
                             RenderUtils.escape(plantId), RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_POT)),
                             nextProjectID);
             
@@ -618,18 +625,6 @@ public class ExamplePoddClient extends RestletPoddClientImpl
     }
     
     /**
-     * Get a connection to the TrayScanDB database.
-     * 
-     * @return A connection to the SQL database for TrayScan
-     * @throws SQLException
-     */
-    public Connection getMySQLConnection() throws SQLException
-    {
-        return DriverManager.getConnection("jdbc:mysql://" + this.getTrayScanHost() + "/" + this.getTrayScanDbName(),
-                this.getTrayScanUsername(), this.getTrayScanPassword());
-    }
-    
-    /**
      * @param trayUriMap
      * @param trayId
      * @param nextProjectID
@@ -651,7 +646,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
         else
         {
             final Model trayIdSparqlResults =
-                    this.doSPARQL(String.format(ClientSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE_LABEL_STRSTARTS,
+                    this.doSPARQL(String.format(ExampleSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE_LABEL_STRSTARTS,
                             RenderUtils.escape(trayId), RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_TRAY)),
                             nextProjectID);
             
@@ -679,12 +674,6 @@ public class ExamplePoddClient extends RestletPoddClientImpl
             nextTrayUriMap.put(nextTrayURI, nextExperimentUri);
         }
         return nextTrayURI;
-    }
-    
-    private String getUsername()
-    {
-        return this.getProps().get(HrppcConstants.PROP_HRPPC_DATASTORE_USERNAME,
-                HrppcConstants.DEFAULT_HRPPC_DATASTORE_USERNAME);
     }
     
     /**
@@ -861,7 +850,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                 final InferredOWLOntologyID artifactId = nextProjectNameMapping.get(projectUri);
                 final Model nextSparqlResults =
                         this.doSPARQL(
-                                String.format(ClientSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE,
+                                String.format(ExampleSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE,
                                         RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_EXPERIMENT)), artifactId);
                 
                 if(nextSparqlResults.isEmpty())
@@ -906,7 +895,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                                     nextLabelString = nextLabelString.split(" ")[0];
                                     
                                     final Matcher matcher =
-                                            ClientSpreadsheetConstants.REGEX_EXPERIMENT.matcher(nextLabelString);
+                                            ExampleSpreadsheetConstants.REGEX_EXPERIMENT.matcher(nextLabelString);
                                     
                                     if(!matcher.matches())
                                     {
@@ -925,7 +914,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                                         final int nextExperimentNumber = Integer.parseInt(matcher.group(3));
                                         
                                         nextLabelString =
-                                                String.format(ClientSpreadsheetConstants.TEMPLATE_EXPERIMENT,
+                                                String.format(ExampleSpreadsheetConstants.TEMPLATE_EXPERIMENT,
                                                         nextProjectYear, nextProjectNumber, nextExperimentNumber);
                                         
                                         this.log.debug("Reformatted experiment label to: '{}' original=<{}>",
@@ -975,7 +964,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
             {
                 final InferredOWLOntologyID artifactId = nextProjectNameMapping.get(projectUri);
                 final Model nextSparqlResults =
-                        this.doSPARQL(String.format(ClientSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE_ALL_PROPERTIES,
+                        this.doSPARQL(String.format(ExampleSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE_ALL_PROPERTIES,
                                 RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_GENOTYPE)), artifactId);
                 if(nextSparqlResults.isEmpty())
                 {
@@ -1076,7 +1065,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                                 nextLabelString = nextLabelString.split(" ")[0];
                                 
                                 final Matcher matcher =
-                                        ClientSpreadsheetConstants.REGEX_PROJECT.matcher(nextLabelString);
+                                        ExampleSpreadsheetConstants.REGEX_PROJECT.matcher(nextLabelString);
                                 
                                 if(!matcher.matches())
                                 {
@@ -1092,8 +1081,8 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                                     final int nextProjectNumber = Integer.parseInt(matcher.group(2));
                                     
                                     nextLabelString =
-                                            String.format(ClientSpreadsheetConstants.TEMPLATE_PROJECT, nextProjectYear,
-                                                    nextProjectNumber);
+                                            String.format(ExampleSpreadsheetConstants.TEMPLATE_PROJECT,
+                                                    nextProjectYear, nextProjectNumber);
                                     
                                     this.log.debug("Reformatted project label to: '{}' original=<{}>", nextLabelString,
                                             nextLabel);
@@ -1172,16 +1161,16 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                             throw new IllegalArgumentException("Did not find required number of headers");
                         }
                         
-                        if(!headers.get(0).equals(RandomisationConstants.RAND_LINE_NUMBER))
-                        {
-                            throw new IllegalArgumentException("Missing " + RandomisationConstants.RAND_LINE_NUMBER
-                                    + " header");
-                        }
-                        
-                        if(!headers.get(1).equals(RandomisationConstants.RAND_CLIENT_LINE_NAME))
+                        if(!headers.get(0).equals(ExampleLineMappingConstants.RAND_LINE_NUMBER))
                         {
                             throw new IllegalArgumentException("Missing "
-                                    + RandomisationConstants.RAND_CLIENT_LINE_NAME + " header");
+                                    + ExampleLineMappingConstants.RAND_LINE_NUMBER + " header");
+                        }
+                        
+                        if(!headers.get(1).equals(ExampleLineMappingConstants.RAND_CLIENT_LINE_NAME))
+                        {
+                            throw new IllegalArgumentException("Missing "
+                                    + ExampleLineMappingConstants.RAND_CLIENT_LINE_NAME + " header");
                         }
                     }
                     catch(final IllegalArgumentException e)
@@ -1268,119 +1257,119 @@ public class ExamplePoddClient extends RestletPoddClientImpl
             final String nextHeader = headers.get(i);
             final String nextField = nextLine.get(i);
             
-            if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_YEAR))
+            if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_YEAR))
             {
                 result.year = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_PROJECT_NUMBER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_PROJECT_NUMBER))
             {
                 result.projectNumber = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_PROJECT_ID))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_PROJECT_ID))
             {
                 result.projectID = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_EXPERIMENT_NUMBER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_EXPERIMENT_NUMBER))
             {
                 result.experimentNumber = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_EXPERIMENT_ID))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_EXPERIMENT_ID))
             {
                 result.experimentID = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_GENUS))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_GENUS))
             {
                 result.genus = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_SPECIES))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_SPECIES))
             {
                 result.species = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_POT_NUMBER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_POT_NUMBER))
             {
                 result.potNumber = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_TRAY_NUMBER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_TRAY_NUMBER))
             {
                 result.trayNumber = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_POT_NUMBER_TRAY))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_POT_NUMBER_TRAY))
             {
                 result.potNumberTray = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_COLUMN_NUMBER_TRAY))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_COLUMN_NUMBER_TRAY))
             {
                 result.columnNumberTray = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_COLUMN_LETTER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_COLUMN_LETTER))
             {
                 result.columnLetter = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_ROW_NUMBER_TRAY))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_ROW_NUMBER_TRAY))
             {
                 result.rowNumberTray = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_ROW_NUMBER_REP))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_ROW_NUMBER_REP))
             {
                 result.rowNumberRep = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_COLUMN_NUMBER_REP))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_COLUMN_NUMBER_REP))
             {
                 result.columnNumberRep = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_COLUMN_NUMBER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_COLUMN_NUMBER))
             {
                 result.columnNumber = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_TRAY_ID))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_TRAY_ID))
             {
                 result.trayID = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_TRAY_NOTES))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_TRAY_NOTES))
             {
                 result.trayNotes = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_TRAY_ROW_NUMBER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_TRAY_ROW_NUMBER))
             {
                 result.trayRowNumber = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_TRAY_TYPE_NAME))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_TRAY_TYPE_NAME))
             {
                 result.trayTypeName = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_POSITION))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_POSITION))
             {
                 result.position = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_PLANT_ID))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_PLANT_ID))
             {
                 result.plantID = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_PLANT_LINE_NUMBER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_PLANT_LINE_NUMBER))
             {
                 result.plantLineNumber = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_PLANT_NAME))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_PLANT_NAME))
             {
                 result.plantName = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_PLANT_NOTES))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_PLANT_NOTES))
             {
                 result.plantNotes = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_POT_TYPE))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_POT_TYPE))
             {
                 result.potType = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_CONTROL))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_CONTROL))
             {
                 result.control = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_REPLICATE_NUMBER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_REPLICATE_NUMBER))
             {
                 result.replicateNumber = nextField;
             }
-            else if(nextHeader.trim().equals(ClientSpreadsheetConstants.CLIENT_POT_REPLICATE_NUMBER))
+            else if(nextHeader.trim().equals(ExampleSpreadsheetConstants.CLIENT_POT_REPLICATE_NUMBER))
             {
                 result.potReplicateNumber = nextField;
             }
@@ -1391,8 +1380,8 @@ public class ExamplePoddClient extends RestletPoddClientImpl
             }
         }
         
-        this.generateTrayScanRDF(projectUriMap, experimentUriMap, trayUriMap, potUriMap, materialUriMap,
-                genotypeUriMap, uploadQueue, result);
+        this.generateTrayRDF(projectUriMap, experimentUriMap, trayUriMap, potUriMap, materialUriMap, genotypeUriMap,
+                uploadQueue, result);
         
         // Push the line into MySQL
         this.insertTrayScanToMySQL(result);
@@ -1517,14 +1506,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
         return uploadQueue;
     }
     
-    public Map<Path, String> uploadToCherax(final List<Path> bagsToUpload, final Path localRootPath,
-            final PasswordFinder keyExtractor) throws PoddClientException, NoSuchAlgorithmException, IOException
-    {
-        return this.uploadToCherax(bagsToUpload, this.getSshServerFingerprint(), this.getSshHost(), this.getPortNo(),
-                this.getUsername(), this.getPathToPublicKey(), localRootPath, this.getRemoteRootPath(), keyExtractor);
-    }
-    
-    public Map<Path, String> uploadToCherax(final List<Path> bagsToUpload, final String sshServerFingerprint,
+    public Map<Path, String> uploadToStorage(final List<Path> bagsToUpload, final String sshServerFingerprint,
             final String sshHost, final int portNo, final String username, final Path pathToPublicKey,
             final Path localRootPath, final Path remoteRootPath, final PasswordFinder keyExtractor)
         throws PoddClientException, NoSuchAlgorithmException, IOException
@@ -1629,12 +1611,12 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                         fileFound = false;
                     }
                     
-                    ConcurrentMap<Algorithm, String> bagDigests = digests.get(nextBag);
+                    final ConcurrentMap<Algorithm, String> bagDigests = digests.get(nextBag);
                     if(bagDigests.isEmpty())
                     {
                         this.log.error("No bag digests were generated for bag: {}", nextBag);
                     }
-                    for(Entry<Algorithm, String> entry : bagDigests.entrySet())
+                    for(final Entry<Algorithm, String> entry : bagDigests.entrySet())
                     {
                         final Path localDigestPath =
                                 localPath.resolveSibling(localPath.getFileName() + entry.getKey().getExtension());
@@ -1648,13 +1630,13 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                         boolean nextDigestCorrect = false;
                         try
                         {
-                            Path tempFile = Files.createTempFile("podd-digest-", entry.getKey().getExtension());
-                            SFTPFileTransfer sftpFileTransfer = new SFTPFileTransfer(sftp.getSFTPEngine());
+                            final Path tempFile = Files.createTempFile("podd-digest-", entry.getKey().getExtension());
+                            final SFTPFileTransfer sftpFileTransfer = new SFTPFileTransfer(sftp.getSFTPEngine());
                             sftpFileTransfer.download(remoteBagPath.toAbsolutePath().toString(), tempFile
                                     .toAbsolutePath().toString());
                             nextDigestFileFound = true;
                             
-                            List<String> allLines = Files.readAllLines(tempFile, StandardCharsets.UTF_8);
+                            final List<String> allLines = Files.readAllLines(tempFile, StandardCharsets.UTF_8);
                             if(allLines.isEmpty())
                             {
                                 nextDigestCorrect = false;
@@ -1763,6 +1745,112 @@ public class ExamplePoddClient extends RestletPoddClientImpl
             }
         }
         return resultMap;
+    }
+    
+    private void verifyLstHeaders(final List<String> headers)
+    {
+        if(headers == null || headers.size() < ExampleLstConstants.MIN_LST_HEADERS_SIZE)
+        {
+            this.log.error("Did not find valid headers: {}", headers);
+            throw new IllegalArgumentException("Did not find valid headers");
+        }
+        
+        if(!headers.contains(ExampleLstConstants.UNIT))
+        {
+            throw new IllegalArgumentException("Did not find UNIT header");
+        }
+        
+        if(!headers.contains(ExampleLstConstants.ID))
+        {
+            throw new IllegalArgumentException("Did not find ID header");
+        }
+        
+        if(!headers.contains(ExampleLstConstants.ENTRY))
+        {
+            throw new IllegalArgumentException("Did not find ENTRY header");
+        }
+        
+        if(!headers.contains(ExampleLstConstants.ROW))
+        {
+            throw new IllegalArgumentException("Did not find ROW header");
+        }
+        
+        if(!headers.contains(ExampleLstConstants.RANGE))
+        {
+            throw new IllegalArgumentException("Did not find RANGE header");
+        }
+        
+        if(!headers.contains(ExampleLstConstants.REP))
+        {
+            throw new IllegalArgumentException("Did not find REP header");
+        }
+        
+        if(!headers.contains(ExampleLstConstants.TRT))
+        {
+            throw new IllegalArgumentException("Did not find TRT header");
+        }
+        
+        if(!headers.contains(ExampleLstConstants.B111))
+        {
+            throw new IllegalArgumentException("Did not find B111 header");
+        }
+        
+        if(!headers.contains(ExampleLstConstants.B121))
+        {
+            throw new IllegalArgumentException("Did not find B121 header");
+        }
+        
+    }
+    
+    /**
+     * Verifies the list of projects, throwing an IllegalArgumentException if there are unrecognised
+     * headers or if any mandatory headers are missing.
+     * 
+     * @throws IllegalArgumentException
+     *             If the headers are not verified correctly.
+     */
+    public void verifyTrayScanListHeaders(final List<String> headers) throws IllegalArgumentException
+    {
+        if(headers == null || headers.size() < ExampleSpreadsheetConstants.MIN_TRAYSCAN_HEADERS_SIZE)
+        {
+            this.log.error("Did not find valid headers: {}", headers);
+            throw new IllegalArgumentException("Did not find valid headers");
+        }
+        
+        if(!headers.contains(ExampleSpreadsheetConstants.CLIENT_TRAY_ID))
+        {
+            throw new IllegalArgumentException("Did not find tray id header");
+        }
+        
+        if(!headers.contains(ExampleSpreadsheetConstants.CLIENT_TRAY_NOTES))
+        {
+            throw new IllegalArgumentException("Did not find tray notes header");
+        }
+        
+        if(!headers.contains(ExampleSpreadsheetConstants.CLIENT_TRAY_TYPE_NAME))
+        {
+            throw new IllegalArgumentException("Did not find tray type name header");
+        }
+        
+        if(!headers.contains(ExampleSpreadsheetConstants.CLIENT_POSITION))
+        {
+            throw new IllegalArgumentException("Did not find position header");
+        }
+        
+        if(!headers.contains(ExampleSpreadsheetConstants.CLIENT_PLANT_ID))
+        {
+            throw new IllegalArgumentException("Did not find plant id header");
+        }
+        
+        if(!headers.contains(ExampleSpreadsheetConstants.CLIENT_PLANT_NAME))
+        {
+            throw new IllegalArgumentException("Did not find plant name header");
+        }
+        
+        if(!headers.contains(ExampleSpreadsheetConstants.CLIENT_PLANT_NOTES))
+        {
+            throw new IllegalArgumentException("Did not find plant notes header");
+        }
     }
     
 }
