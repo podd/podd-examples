@@ -124,7 +124,8 @@ public class ExampleCLI
                         if(nextEntry.getKey().startsWith("bag"))
                         {
                             // TODO: Support the new method
-                            //client.uploadToCherax(Arrays.asList(nextEntry.getValue()), outputDirPath, keyExtractor);
+                            // client.uploadToCherax(Arrays.asList(nextEntry.getValue()),
+                            // outputDirPath, keyExtractor);
                         }
                     }
                     // Clear out passphrase from memory at this point
