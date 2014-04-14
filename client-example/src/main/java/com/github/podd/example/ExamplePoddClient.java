@@ -399,7 +399,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
             newModel.add(
                     nextGenotypeURI,
                     RDFS.COMMENT,
-                    RestletPoddClientImpl.vf.createLiteral("Plant line in : ", genus + " " + species + " named, "
+                    RestletPoddClientImpl.vf.createLiteral("Plant line in : " + genus + " " + species + " named, "
                             + plantName + " : labelled as number " + plantLineNumber));
             newModel.add(nextGenotypeURI, PODD.PODD_SCIENCE_HAS_GENUS, RestletPoddClientImpl.vf.createLiteral(genus));
             newModel.add(nextGenotypeURI, PODD.PODD_SCIENCE_HAS_SPECIES,
@@ -1710,7 +1710,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
         return results;
     }
     
-    public ConcurrentMap<InferredOWLOntologyID, InferredOWLOntologyID> uploadToPodd(
+    public ConcurrentMap<InferredOWLOntologyID, InferredOWLOntologyID> uploadArtifacts(
             final ConcurrentMap<InferredOWLOntologyID, Model> uploadQueue) throws PoddClientException
     {
         final ConcurrentMap<InferredOWLOntologyID, InferredOWLOntologyID> resultMap = new ConcurrentHashMap<>();
