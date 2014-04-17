@@ -44,7 +44,7 @@
 		<dependency>
 			<groupId>gov.loc</groupId>
 			<artifactId>bagit</artifactId>
-			<version>4.9-SNAPSHOT</version>
+			<version>4.9.0</version>
 		</dependency>
 		<dependency>
 			<groupId>net.sf.opencsv</groupId>
