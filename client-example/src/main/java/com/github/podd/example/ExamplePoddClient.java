@@ -563,7 +563,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
             final Model plantIdSparqlResults =
                     this.doSPARQL(String.format(ExampleSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE_LABEL_STRSTARTS,
                             RenderUtils.escape(plantId), RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_POT)),
-                            nextProjectID);
+                            Arrays.asList(nextProjectID));
             
             if(plantIdSparqlResults.isEmpty())
             {
@@ -647,7 +647,7 @@ public class ExamplePoddClient extends RestletPoddClientImpl
             final Model trayIdSparqlResults =
                     this.doSPARQL(String.format(ExampleSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE_LABEL_STRSTARTS,
                             RenderUtils.escape(trayId), RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_TRAY)),
-                            nextProjectID);
+                            Arrays.asList(nextProjectID));
             
             if(trayIdSparqlResults.isEmpty())
             {
@@ -850,7 +850,8 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                 final Model nextSparqlResults =
                         this.doSPARQL(
                                 String.format(ExampleSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE,
-                                        RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_EXPERIMENT)), artifactId);
+                                        RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_EXPERIMENT)),
+                                Arrays.asList(artifactId));
                 
                 if(nextSparqlResults.isEmpty())
                 {
@@ -964,7 +965,8 @@ public class ExamplePoddClient extends RestletPoddClientImpl
                 final InferredOWLOntologyID artifactId = nextProjectNameMapping.get(projectUri);
                 final Model nextSparqlResults =
                         this.doSPARQL(String.format(ExampleSpreadsheetConstants.TEMPLATE_SPARQL_BY_TYPE_ALL_PROPERTIES,
-                                RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_GENOTYPE)), artifactId);
+                                RenderUtils.getSPARQLQueryString(PODD.PODD_SCIENCE_GENOTYPE)), Arrays
+                                .asList(artifactId));
                 if(nextSparqlResults.isEmpty())
                 {
                     this.log.debug("Could not find any existing genotypes for project: {} {}", nextProjectName,
